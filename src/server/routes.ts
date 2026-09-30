@@ -7,13 +7,17 @@ export const apiRouter = Router();
 
 // Create a new game room
 apiRouter.post('/games', (req, res) => {
-  const { customId } = req.body || {};
-  const game = gameManager.createGame(customId);
-  res.status(201).json({
-    success: true,
-    gameId: game.id,
-    state: createPlayerView(game, null),
-  });
+  try {
+    const { customId } = req.body || {};
+    const game = gameManager.createGame(customId);
+    res.status(201).json({
+      success: true,
+      gameId: game.id,
+      state: createPlayerView(game, null),
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Failed to create game' });
+  }
 });
 
 // Get game state / player view
@@ -62,27 +66,42 @@ apiRouter.post('/games/:id/join', (req, res) => {
 // Fill remaining slots with AI Bots
 apiRouter.post('/games/:id/bots', (req, res) => {
   const gameId = req.params.id;
+  const sessionToken = req.body?.sessionToken as string | undefined;
+
+  let viewerRole: Role | null = null;
+  if (sessionToken) {
+    const session = db.getSession(sessionToken);
+    if (session && session.gameId.toUpperCase() === gameId.toUpperCase()) {
+      viewerRole = session.role;
+    }
+  }
+
   const result = gameManager.fillWithBots(gameId);
   if (!result.success) {
     res.status(400).json({ error: result.error });
     return;
   }
-  res.json({ success: true, state: result.state });
+  res.json({ success: true, view: createPlayerView(result.state!, viewerRole) });
 });
 
-// Submit order via HTTP endpoint
+// Submit order via HTTP endpoint (requires sessionToken matching the role)
 apiRouter.post('/games/:id/order', (req, res) => {
   const gameId = req.params.id;
-  const { role, amount } = req.body || {};
+  const { role, amount, sessionToken } = req.body || {};
 
   if (!role || typeof amount !== 'number') {
     res.status(400).json({ error: 'role and amount are required' });
     return;
   }
+  if (!sessionToken) {
+    res.status(401).json({ error: 'sessionToken is required' });
+    return;
+  }
 
-  const result = gameManager.submitOrder(gameId, role, amount);
+  const result = gameManager.submitOrder(gameId, role, amount, sessionToken);
   if (!result.success) {
-    res.status(400).json({ error: result.error });
+    const status = result.error?.startsWith('Unauthorized') ? 403 : 400;
+    res.status(status).json({ error: result.error });
     return;
   }
 

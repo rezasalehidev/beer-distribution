@@ -30,7 +30,7 @@ export const App: React.FC = () => {
     clearError,
     submitOrder,
     fillBots,
-    sessionToken,
+    selectRole,
   } = useGameSocket(activeGameId, preferredRole);
 
   // Synchronize URL with activeGameId
@@ -75,21 +75,8 @@ export const App: React.FC = () => {
 
   const handleSelectRole = async (role: Role) => {
     if (!activeGameId) return;
-    try {
-      const playerName = sessionStorage.getItem('beer_game_player_name') || 'Player';
-      await fetch(`/api/games/${activeGameId}/join`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionToken,
-          playerName,
-          role,
-        }),
-      });
-      setPreferredRole(role);
-    } catch (e: any) {
-      console.error('Failed to select role', e);
-    }
+    setPreferredRole(role);
+    selectRole(role);
   };
 
   const handleExit = () => {

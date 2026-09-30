@@ -29,7 +29,17 @@ export class GameManager {
   }
 
   public createGame(customId?: string): GameState {
-    const id = customId ? customId.toUpperCase() : generateRoomCode();
+    let id = customId ? customId.toUpperCase() : generateRoomCode();
+    if (!customId) {
+      // Avoid colliding with an existing in-memory or persisted room
+      let attempts = 0;
+      while (this.getGame(id) && attempts < 20) {
+        id = generateRoomCode();
+        attempts++;
+      }
+    } else if (this.getGame(id)) {
+      throw new Error(`Room code ${id} already exists`);
+    }
     const gameState = createInitialGameState(id);
     this.games.set(id, gameState);
     this.database.saveGame(gameState);
@@ -60,10 +70,20 @@ export class GameManager {
       return { success: false, error: 'Game not found' };
     }
 
-    // 1. Check if this session already has a role in this game (reconnection)
+    // 1. Check if this session already has a role in this game (reconnection / role switch)
     for (const role of ROLES) {
       const slot = game.slots[role];
       if (slot.sessionToken === sessionToken) {
+        // Allow switching to a different free role while still in lobby
+        if (
+          preferredRole &&
+          preferredRole !== role &&
+          game.status === 'lobby' &&
+          !game.slots[preferredRole].occupied
+        ) {
+          return this.selectRole(upperId, sessionToken, preferredRole, playerName);
+        }
+
         slot.connected = true;
         if (playerName && playerName !== 'Player') {
           slot.playerName = playerName;
@@ -124,6 +144,66 @@ export class GameManager {
     return { success: true, role: assignedRole, state: game };
   }
 
+  public selectRole(
+    gameId: string,
+    sessionToken: string,
+    role: Role,
+    playerName?: string
+  ): { success: boolean; role?: Role; error?: string; state?: GameState } {
+    const upperId = gameId.toUpperCase();
+    const game = this.getGame(upperId);
+    if (!game) {
+      return { success: false, error: 'Game not found' };
+    }
+    if (game.status !== 'lobby') {
+      return { success: false, error: 'Cannot change role after the game has started' };
+    }
+    if (game.slots[role].occupied && game.slots[role].sessionToken !== sessionToken) {
+      return { success: false, error: `Role ${role} is already taken` };
+    }
+
+    // Clear any previous slot held by this session
+    for (const r of ROLES) {
+      const slot = game.slots[r];
+      if (slot.sessionToken === sessionToken) {
+        game.slots[r] = {
+          role: r,
+          occupied: false,
+          playerName: '',
+          isBot: false,
+          connected: false,
+        };
+      }
+    }
+
+    const name =
+      (playerName && playerName !== 'Player' ? playerName : undefined) ||
+      `Player (${role})`;
+
+    game.slots[role] = {
+      role,
+      occupied: true,
+      playerName: name,
+      isBot: false,
+      sessionToken,
+      connected: true,
+    };
+    game.updatedAt = Date.now();
+    this.database.saveSession(sessionToken, upperId, role, name);
+
+    const allOccupied = ROLES.every((r) => game.slots[r].occupied);
+    if (allOccupied) {
+      const startedState = startGame(game);
+      this.games.set(upperId, startedState);
+      this.triggerBotOrders(startedState);
+      this.database.saveGame(startedState);
+      return { success: true, role, state: startedState };
+    }
+
+    this.database.saveGame(game);
+    return { success: true, role, state: game };
+  }
+
   public fillWithBots(gameId: string): { success: boolean; state?: GameState; error?: string } {
     const upperId = gameId.toUpperCase();
     const game = this.getGame(upperId);
@@ -158,7 +238,8 @@ export class GameManager {
   public submitOrder(
     gameId: string,
     role: Role,
-    amount: number
+    amount: number,
+    sessionToken?: string
   ): { success: boolean; error?: string; state?: GameState; advanced?: boolean } {
     const upperId = gameId.toUpperCase();
     const game = this.getGame(upperId);
@@ -168,6 +249,16 @@ export class GameManager {
 
     if (game.status !== 'active') {
       return { success: false, error: `Cannot submit order when game is ${game.status}` };
+    }
+
+    const slot = game.slots[role];
+    if (!slot?.occupied) {
+      return { success: false, error: `Role ${role} is not occupied` };
+    }
+    if (!slot.isBot) {
+      if (!sessionToken || slot.sessionToken !== sessionToken) {
+        return { success: false, error: 'Unauthorized: invalid session for this role' };
+      }
     }
 
     // Validate order format
@@ -188,7 +279,6 @@ export class GameManager {
     // Ensure all bot orders for this round are submitted
     this.triggerBotOrders(game);
 
-    let advanced = false;
     // Advance round if all 4 roles have submitted
     if (areAllOrdersSubmitted(game.pendingOrders)) {
       const orders = {
@@ -200,7 +290,6 @@ export class GameManager {
 
       const advancedState = advanceRoundWithOrders(game, orders);
       this.games.set(upperId, advancedState);
-      advanced = true;
 
       // If new round is active, compute bot orders for next round
       if (advancedState.status === 'active') {

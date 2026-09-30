@@ -4,7 +4,7 @@ import { Role, RoleState } from './types';
  * Calculates an intelligent base-stock order decision for a bot player.
  * Aims to balance incoming demand while stabilizing inventory toward the target (12).
  */
-export function calculateBotOrder(role: Role, roleState: RoleState, _round: number): number {
+export function calculateBotOrder(_role: Role, roleState: RoleState, _round: number): number {
   const targetInventory = 12;
   const currentInventory = roleState.inventory;
   const currentBacklog = roleState.backlog;

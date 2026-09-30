@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Award, DollarSign, Factory, RotateCcw, Store, Table, TrendingUp, Truck, Warehouse } from 'lucide-react';
+import { Award, DollarSign, Factory, RotateCcw, Store, Table, Truck, Warehouse } from 'lucide-react';
 import { FinalResults, Role, ROLES } from '../types';
 import { ResultsChart } from './ResultsChart';
 

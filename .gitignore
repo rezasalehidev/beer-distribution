@@ -1,2 +1,8 @@
 .DS_Store
 node_modules/
+beer_game.db
+beer_game.db-*
+*.db
+dist/
+*.tsbuildinfo
+

@@ -108,14 +108,34 @@ export class GameWebSocketServer {
         break;
       }
 
+      case 'SELECT_ROLE': {
+        if (!ws.gameId || !ws.sessionToken) {
+          this.send(ws, { type: 'ERROR', payload: { message: 'Not connected to a game' } });
+          return;
+        }
+
+        const result = gameManager.selectRole(ws.gameId, ws.sessionToken, message.payload.role);
+        if (!result.success) {
+          this.send(ws, {
+            type: 'ERROR',
+            payload: { message: result.error || 'Failed to select role' },
+          });
+          return;
+        }
+
+        ws.role = result.role || null;
+        this.broadcastGame(ws.gameId);
+        break;
+      }
+
       case 'SUBMIT_ORDER': {
-        if (!ws.gameId || !ws.role) {
+        if (!ws.gameId || !ws.role || !ws.sessionToken) {
           this.send(ws, { type: 'ERROR', payload: { message: 'Not in an active role' } });
           return;
         }
 
         const { amount } = message.payload;
-        const result = gameManager.submitOrder(ws.gameId, ws.role, amount);
+        const result = gameManager.submitOrder(ws.gameId, ws.role, amount, ws.sessionToken);
 
         if (!result.success) {
           this.send(ws, { type: 'ERROR', payload: { message: result.error || 'Failed to submit order' } });

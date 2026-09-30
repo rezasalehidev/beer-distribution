@@ -49,19 +49,24 @@ describe('GameManager & SQLite Persistence Integration', () => {
     expect(p4.state?.currentRound).toBe(1);
 
     // Test order submissions
-    const retOrder = gm.submitOrder('ROOM1', 'retailer', 4);
+    const retOrder = gm.submitOrder('ROOM1', 'retailer', 4, 'token-ret');
     expect(retOrder.success).toBe(true);
     expect(retOrder.advanced).toBe(false);
 
     // Duplicate submission in same round should fail
-    const dupOrder = gm.submitOrder('ROOM1', 'retailer', 6);
+    const dupOrder = gm.submitOrder('ROOM1', 'retailer', 6, 'token-ret');
     expect(dupOrder.success).toBe(false);
     expect(dupOrder.error).toContain('already placed an order');
 
+    // Unauthorized order spoofing should fail
+    const spoof = gm.submitOrder('ROOM1', 'wholesaler', 4, 'wrong-token');
+    expect(spoof.success).toBe(false);
+    expect(spoof.error).toContain('Unauthorized');
+
     // Submit remaining orders
-    gm.submitOrder('ROOM1', 'wholesaler', 4);
-    gm.submitOrder('ROOM1', 'distributor', 4);
-    const finalOrder = gm.submitOrder('ROOM1', 'factory', 4);
+    gm.submitOrder('ROOM1', 'wholesaler', 4, 'token-whl');
+    gm.submitOrder('ROOM1', 'distributor', 4, 'token-dst');
+    const finalOrder = gm.submitOrder('ROOM1', 'factory', 4, 'token-fac');
 
     expect(finalOrder.success).toBe(true);
     expect(finalOrder.advanced).toBe(true);
@@ -83,7 +88,7 @@ describe('GameManager & SQLite Persistence Integration', () => {
   });
 
   it('should auto-fill empty slots with AI bots and advance rounds automatically when human player orders', () => {
-    const game = gm.createGame('BOTRM');
+    gm.createGame('BOTRM');
     gm.joinGame('BOTRM', 'token-solo', 'Solo Player', 'retailer');
 
     const botFill = gm.fillWithBots('BOTRM');
@@ -95,9 +100,22 @@ describe('GameManager & SQLite Persistence Integration', () => {
     expect(botFill.state?.slots.factory.isBot).toBe(true);
 
     // Since bots auto-order, the sole human player submitting an order should advance the round immediately
-    const humanOrder = gm.submitOrder('BOTRM', 'retailer', 4);
+    const humanOrder = gm.submitOrder('BOTRM', 'retailer', 4, 'token-solo');
     expect(humanOrder.success).toBe(true);
     expect(humanOrder.advanced).toBe(true);
     expect(humanOrder.state?.currentRound).toBe(2);
+  });
+
+  it('should allow lobby role switching for an existing session', () => {
+    gm.createGame('SWITCH');
+    const first = gm.joinGame('SWITCH', 'token-a', 'Alex', 'retailer');
+    expect(first.role).toBe('retailer');
+
+    const switched = gm.selectRole('SWITCH', 'token-a', 'factory', 'Alex');
+    expect(switched.success).toBe(true);
+    expect(switched.role).toBe('factory');
+    expect(switched.state?.slots.retailer.occupied).toBe(false);
+    expect(switched.state?.slots.factory.occupied).toBe(true);
+    expect(switched.state?.slots.factory.sessionToken).toBe('token-a');
   });
 });

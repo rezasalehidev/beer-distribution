@@ -1,5 +1,5 @@
 import { calculateFinalResults } from './rules';
-import { GameState, PlayerView, Role, ROLES, SlotPublicInfo } from './types';
+import { GameState, PlayerView, Role, SlotPublicInfo } from './types';
 
 /**
  * Creates a sanitized, server-enforced player-specific view of the game state.

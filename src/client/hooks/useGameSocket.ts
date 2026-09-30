@@ -16,14 +16,24 @@ export function useGameSocket(gameId: string | null, preferredRole?: Role | null
   const [isConnected, setIsConnected] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<any>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionTokenRef = useRef<string>(getOrCreateSessionToken());
+  const intentionalCloseRef = useRef(false);
 
   const connect = useCallback(() => {
     if (!gameId) return;
 
+    intentionalCloseRef.current = false;
+
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
     if (wsRef.current) {
+      intentionalCloseRef.current = true;
       wsRef.current.close();
+      intentionalCloseRef.current = false;
     }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -65,7 +75,10 @@ export function useGameSocket(gameId: string | null, preferredRole?: Role | null
 
     ws.onclose = () => {
       setIsConnected(false);
-      // Auto reconnect after 2 seconds
+      if (intentionalCloseRef.current) {
+        return;
+      }
+      // Auto reconnect after 2 seconds on unexpected disconnect
       reconnectTimeoutRef.current = setTimeout(() => {
         connect();
       }, 2000);
@@ -77,16 +90,25 @@ export function useGameSocket(gameId: string | null, preferredRole?: Role | null
   }, [gameId, preferredRole]);
 
   useEffect(() => {
+    if (!gameId) {
+      setGameState(null);
+      setIsConnected(false);
+      return;
+    }
+
     connect();
     return () => {
+      intentionalCloseRef.current = true;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
       }
       if (wsRef.current) {
         wsRef.current.close();
+        wsRef.current = null;
       }
     };
-  }, [connect]);
+  }, [connect, gameId]);
 
   const submitOrder = useCallback((amount: number) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -108,6 +130,15 @@ export function useGameSocket(gameId: string | null, preferredRole?: Role | null
     wsRef.current.send(JSON.stringify(msg));
   }, []);
 
+  const selectRole = useCallback((role: Role) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    const msg: ClientMessage = {
+      type: 'SELECT_ROLE',
+      payload: { role },
+    };
+    wsRef.current.send(JSON.stringify(msg));
+  }, []);
+
   return {
     gameState,
     isConnected,
@@ -115,6 +146,7 @@ export function useGameSocket(gameId: string | null, preferredRole?: Role | null
     clearError: () => setErrorMessage(null),
     submitOrder,
     fillBots,
+    selectRole,
     sessionToken: sessionTokenRef.current,
   };
 }

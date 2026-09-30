@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, CheckCircle, Clock, Users } from 'lucide-react';
+import { CheckCircle, Clock, Users } from 'lucide-react';
 import { PlayerView, Role, ROLES } from '../types';
 
 interface PlayerStatusBoardProps {

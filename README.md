@@ -34,3 +34,15 @@ pnpm build && pnpm start   # production on :3001
 | `src/core/` | Pure game rules (no UI/HTTP) |
 | `src/server/` | Express API, WebSockets, SQLite |
 | `src/client/` | React lobby, game, results UI |
+
+## Implementation notes
+
+- **Authoritative server:** clients send intents (`SUBMIT_ORDER`, `JOIN_LOBBY`, etc.); the server owns state and broadcasts role-scoped `PlayerView`s over WebSockets.
+- **Visibility:** during play, each player only sees their own inventory/backlog/costs; peers only get boolean “submitted” flags. Full cross-role history unlocks when `status === 'finished'`.
+- **Persistence:** SQLite (`better-sqlite3`) stores game JSON + session tokens so refresh/reconnect restores the same role.
+- **Bots:** empty lobby slots can be filled with a base-stock heuristic so one person can finish a full game.
+- **Tests:** `pnpm test` checks the `everyone-orders-four` fixture (total cost **754**), delay propagation from `EXAMPLE.md`, visibility redaction, and game-manager persistence.
+
+## AI assistance disclosure
+
+An AI coding assistant (Cursor) was used to help scaffold the app structure, implement game rules against `EXAMPLE.md` / fixtures, build the React UI and WebSocket sync, write tests, and fix build/auth/visibility issues. Game math, delays, costs, and behavior were verified with automated tests and manual play.

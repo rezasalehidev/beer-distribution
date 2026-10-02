@@ -45,4 +45,4 @@ pnpm build && pnpm start   # production on :3001
 
 ## AI assistance disclosure
 
-An AI coding assistant (Cursor) was used to help scaffold the app structure, implement game rules against `EXAMPLE.md` / fixtures, build the React UI and WebSocket sync, write tests, and fix build/auth/visibility issues. Game math, delays, costs, and behavior were verified with automated tests and manual play.
+An AI coding assistant was used to help scaffold the app structure, implement game rules against `EXAMPLE.md` / fixtures, build the React UI and WebSocket sync, write tests, and fix build/auth/visibility issues. Game math, delays, costs, and behavior were verified with automated tests and manual play.
